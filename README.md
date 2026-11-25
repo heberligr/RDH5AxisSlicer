@@ -10,7 +10,7 @@ calibration, tuning, first-print workflow) comes in Milestone 7.
 ## Setup
 
 ```bash
-cd five_axis_slicer
+cd RDH5AxisSlicer
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
