@@ -7,28 +7,51 @@ calibration, tuning, first-print workflow) comes in Milestone 7.
 |---|---|---|
 | ![](docs/m2_overhangs.png) | ![](docs/m2_segments.png) | ![](docs/m2_machine_view.png) |
 
-## Setup
+## Start the app (no typing needed)
+
+1. Install **Python 3.11 or newer** from https://www.python.org/downloads/.
+   On Windows, tick **"Add python.exe to PATH"** in the installer.
+2. Open the repo folder and double-click the launcher for your computer:
+
+   | Computer | Double-click |
+   |---|---|
+   | Windows | `RDH5AxisSlicer.bat` |
+   | macOS | `RDH5AxisSlicer.command` |
+   | Linux | `RDH5AxisSlicer.sh` (choose "Run" if asked) |
+
+The **first launch** sets everything up, which takes a few minutes and shows a
+window with progress. It creates a private Python environment in `.venv` inside
+the folder and installs the libraries. After that, the launcher opens the
+slicer straight away. It also re-installs by itself whenever
+`requirements.txt` changes.
+
+Inside the app:
+
+- **Open STL...** picks a model with the normal file browser.
+- **Demo part** loads a built-in cube, cube with arm, or T-shape.
+- **Project > Open project... / Save project as...** loads and saves your cuts.
+  Try opening `examples/t_shape.json`.
+- On Windows you can also drag an `.stl` or project `.json` onto
+  `RDH5AxisSlicer.bat`.
+
+**If it doesn't start:**
+
+- **Windows:** the app runs without a console, so errors go to
+  `segslicer.log` in the folder.
+- **macOS:** the first time, you may need to right-click the `.command` file
+  and choose **Open** to get past the security warning.
+- If the file browser doesn't appear (some Linux Pythons lack Tkinter), type
+  the path in the box under the button instead. On Linux, `sudo apt install
+  python3-tk` adds Tkinter.
+
+### From a terminal (optional)
 
 ```bash
-cd RDH5AxisSlicer
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+python -m segslicer [model.stl | project.json] [--machine my_machine.yaml]
 ```
-
-Python 3.11 or newer.
-
-## Run
-
-```bash
-python -m segslicer                              # empty; pick a demo part in the panel
-python -m segslicer path/to/model.stl
-python -m segslicer examples/t_shape.json        # open a saved project
-python -m segslicer --machine my_machine.yaml    # use a different machine file
-```
-
-You can also type a path into the **STL path** box and click **Load STL**, or
-choose a built-in **Demo part** (cube, cube with arm, T-shape).
 
 ## Run the tests
 
@@ -65,6 +88,7 @@ segslicer/
   segments.py    cuts -> segments, local cuts, dependency / print order
   project.py     save / load projects as JSON
   demo_models.py cube, cube-with-arm, T-shape generated in code
+  file_dialog.py native Open/Save dialogs (Tkinter, in a helper process)
   viewer.py      Polyscope window and ImGui panel
 tests/           pytest unit tests
 examples/        saved projects for the demo parts
@@ -151,7 +175,7 @@ ignored.
 
 ## Milestone 2 manual test checklist
 
-1. `python -m segslicer`, choose **T-shape** and click **Load demo**. The bar
+1. Start the app, choose **T-shape** and click **Load demo**. The bar
    undersides are red.
 2. **Add cut**. Set the point to `5, 0, 34` and the normal tilt/azimuth to
    90 / 0. The right half of the bar turns blue and loses its red.
@@ -162,11 +186,11 @@ ignored.
    vertical hotend.
 5. Try a bad cut (normal pointing down, `tilt 180`) and read the warnings.
 6. Save the project, load another demo, then load the project again.
-7. Compare with `python -m segslicer examples/t_shape.json`.
+7. Compare with **Open project...** > `examples/t_shape.json`.
 
 ## Milestone 1 manual test checklist
 
-1. `python -m segslicer some_part.stl`: the part sits on the grey table,
+1. **Open STL...** and pick a part: it sits on the grey table,
    centred on the orange pivot point.
 2. Open **Hotend / IK test** and tick **Show hotend**. The green hotend sits at
    the top centre of the part.

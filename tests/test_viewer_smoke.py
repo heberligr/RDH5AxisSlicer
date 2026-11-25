@@ -50,3 +50,21 @@ def test_demo_cut_edit_save_load(viewer, tmp_path):
     viewer.delete_cut(0)
     assert len(viewer.seg.segments) == 1
     ps.frame_tick()
+
+
+def test_file_dialog_failure_falls_back_to_typing(viewer, monkeypatch):
+    from segslicer import viewer as viewer_mod
+    from segslicer.file_dialog import DialogUnavailable
+
+    def broken(*args, **kwargs):
+        raise DialogUnavailable("no tkinter")
+
+    assert viewer._dialog(broken, "Open", [], viewer_mod.REPO_DIR) is None
+    assert "Type the path" in viewer.message
+
+
+def test_dialog_start_dir(viewer, tmp_path):
+    from segslicer.viewer import REPO_DIR
+
+    assert viewer._start_dir("") == REPO_DIR / "examples"
+    assert viewer._start_dir(str(tmp_path / "part.stl")) == tmp_path.resolve()

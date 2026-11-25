@@ -28,12 +28,16 @@ import trimesh
 from .collision import HotendModel, ObstacleSet, check_collision, table_mesh_for_machine
 from .config import MachineConfig, Settings
 from .demo_models import DEMO_MODELS
+from .file_dialog import PROJECT_TYPES, STL_TYPES, DialogUnavailable, ask_open, ask_save
 from .kinematics import IKError, RotaryPose, inverse_kinematics, part_to_machine, to_commanded
 from .mesh_io import load_mesh, mesh_info, place_on_bed
 from .overhang import overhang_area, overhang_mask
 from .project import Project, load_project, save_project
 from .segments import Cut, Segmentation, apply_cuts
 from .transforms import direction_from_angles, normalize, rotation_from_z
+
+# Repo folder (dialogs start in examples/ for projects).
+REPO_DIR = Path(__file__).resolve().parent.parent
 
 # Colours (RGB 0..1)
 COLOR_TABLE = (0.35, 0.35, 0.38)
@@ -95,7 +99,7 @@ class SlicerViewer:
         self.project = Project(overhang_angle_deg=settings.overhang_angle_deg if settings else 50.0)
         self.part: trimesh.Trimesh | None = None
         self.path_text: str = model_path or ""
-        self.project_path_text: str = "project.json"
+        self.project_path_text: str = ""
         self.demo_index = 0
         self.info_lines: list[str] = ["No model loaded."]
         self.message = ""
@@ -407,9 +411,16 @@ class SlicerViewer:
     def _ui_model(self) -> None:
         if not psim.CollapsingHeader("Model", psim.ImGuiTreeNodeFlags_DefaultOpen):
             return
-        _, self.path_text = psim.InputText("STL path", self.path_text)
+        if psim.Button("Open STL..."):
+            path = self._dialog(ask_open, "Open a 3D model", STL_TYPES, self._start_dir(self.path_text))
+            if path:
+                self.path_text = path
+                self.load(path)
         psim.SameLine()
-        if psim.Button("Load STL"):
+        psim.TextUnformatted("or type a path:")
+        _, self.path_text = psim.InputText("##stlpath", self.path_text)
+        psim.SameLine()
+        if psim.Button("Load"):
             self.load(self.path_text.strip().strip('"'))
         names = list(DEMO_MODELS)
         _, self.demo_index = psim.Combo("Demo part", self.demo_index, names)
@@ -425,12 +436,41 @@ class SlicerViewer:
     def _ui_project(self) -> None:
         if not psim.CollapsingHeader("Project"):
             return
-        _, self.project_path_text = psim.InputText("Project file", self.project_path_text)
-        if psim.Button("Save project"):
+        if psim.Button("Open project..."):
+            path = self._dialog(ask_open, "Open a project", PROJECT_TYPES, self._start_dir(self.project_path_text))
+            if path:
+                self.project_path_text = path
+                self.load_project_file(path)
+        psim.SameLine()
+        if psim.Button("Save project as..."):
+            path = self._dialog(ask_save, "Save project", PROJECT_TYPES, self._start_dir(self.project_path_text))
+            if path:
+                self.project_path_text = path
+                self.save_project_file(path)
+        psim.TextUnformatted("or type a path:")
+        _, self.project_path_text = psim.InputText("##projpath", self.project_path_text)
+        if psim.Button("Save"):
             self.save_project_file(self.project_path_text.strip().strip('"'))
         psim.SameLine()
-        if psim.Button("Load project"):
+        if psim.Button("Load##proj"):
             self.load_project_file(self.project_path_text.strip().strip('"'))
+
+    # ---- file dialogs ----
+    def _dialog(self, func, title: str, filetypes, start_dir: Path) -> str | None:
+        """Show a native file dialog; on failure explain and fall back to typing."""
+        try:
+            return func(title, filetypes, start_dir)
+        except DialogUnavailable as exc:
+            self.message = f"File dialog not available ({exc}). Type the path in the box instead."
+            return None
+
+    @staticmethod
+    def _start_dir(current_text: str) -> Path:
+        """Folder a dialog opens in: next to the current file, else examples/."""
+        folder = Path(current_text.strip().strip('"')).expanduser().parent
+        if current_text.strip() and folder.is_dir():
+            return folder.resolve()
+        return REPO_DIR / "examples"
 
     def _ui_cuts(self) -> None:
         if not psim.CollapsingHeader("Cuts", psim.ImGuiTreeNodeFlags_DefaultOpen):

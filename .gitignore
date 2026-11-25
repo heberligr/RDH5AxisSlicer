@@ -8,3 +8,6 @@ imgui.ini
 tmp/
 output/
 .polyscope.ini
+
+# Log written when started by double-click
+segslicer.log
