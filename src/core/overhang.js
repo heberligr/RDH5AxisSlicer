@@ -46,3 +46,52 @@ export function overhangArea(mesh, direction, thresholdDeg = 50) {
   const areas = mesh.faceAreas();
   return mask.reduce((sum, isOver, f) => (isOver ? sum + areas[f] : sum), 0);
 }
+
+/**
+ * Group overhang faces into connected regions (faces sharing an edge belong
+ * to the same region). Regions smaller than `minArea` are dropped.
+ * Returns [{ faces, area, centroid }], biggest first. `centroid` is the
+ * area-weighted centre of the region's faces.
+ */
+export function overhangRegions(mesh, direction, thresholdDeg = 50, minArea = 0) {
+  const mask = overhangMask(mesh, direction, thresholdDeg);
+  const parent = mesh.indices.length ? Array.from({ length: mesh.numFaces }, (_, i) => i) : [];
+  const find = (i) => {
+    while (parent[i] !== i) i = parent[i] = parent[parent[i]]; // path halving
+    return i;
+  };
+  // Connect overhang faces that share an edge.
+  const edgeOwner = new Map();
+  const ix = mesh.indices;
+  for (let f = 0; f < mesh.numFaces; f++) {
+    if (!mask[f]) continue;
+    for (let k = 0; k < 3; k++) {
+      const a = ix[3 * f + k], b = ix[3 * f + ((k + 1) % 3)];
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      const other = edgeOwner.get(key);
+      if (other === undefined) edgeOwner.set(key, f);
+      else parent[find(f)] = find(other);
+    }
+  }
+  const groups = new Map();
+  for (let f = 0; f < mesh.numFaces; f++) {
+    if (!mask[f]) continue;
+    const r = find(f);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(f);
+  }
+  const areas = mesh.faceAreas();
+  const regions = [];
+  for (const faces of groups.values()) {
+    let area = 0;
+    const c = [0, 0, 0];
+    for (const f of faces) {
+      const fc = mesh.faceCenter(f);
+      area += areas[f];
+      for (let k = 0; k < 3; k++) c[k] += fc[k] * areas[f];
+    }
+    if (area < minArea || area === 0) continue;
+    regions.push({ faces, area, centroid: c.map((x) => x / area) });
+  }
+  return regions.sort((a, b) => b.area - a.area);
+}

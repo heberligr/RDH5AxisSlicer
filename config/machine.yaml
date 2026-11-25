@@ -51,10 +51,12 @@ kinematics:
     max_deg: 360.0
 
 # FILL IN: linear travel limits of the machine (commanded machine coordinates).
+# Z can go below the table surface: when the table tilts, parts of it swing
+# below the pivot, and the nozzle may need to follow (see README).
 limits:
   x: [-100.0, 100.0]
   y: [-100.0, 100.0]
-  z: [0.0, 200.0]
+  z: [-60.0, 200.0]
 
 # The rotary table (print bed). It moves with the part, so in the part frame it
 # is a fixed obstacle that the hotend must not hit.
@@ -74,11 +76,11 @@ table:
 hotend:
   # FILL IN: cone starting at the nozzle tip (the nozzle + bottom of heater block)
   cone_half_angle_deg: 40.0
-  cone_height: 8.0
+  cone_height: 10.0
   # FILL IN: cylinder for heater block / part-cooling fan / carriage
-  cylinder_radius: 25.0
-  cylinder_start: 8.0   # distance from tip to the bottom of the cylinder
-  cylinder_height: 60.0
+  cylinder_radius: 16.0
+  cylinder_start: 10.0  # distance from tip to the bottom of the cylinder
+  cylinder_height: 50.0
   # Extra safety gap added around the whole model (mm).
   clearance: 1.0
   # Points closer than this to the tip ALONG the tool axis are ignored. Without

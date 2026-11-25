@@ -58,7 +58,33 @@
           <button class="btn" id="demoLoad">Load demo</button>
         </div>
         <label class="check"><input type="checkbox" id="placeOnBed" checked> Place on table when loading</label>
+        <div class="row">
+          <button class="btn" id="orientAuto" title="Try every flat face down and many other directions; keep the one with the least overhang">Auto-orient</button>
+          <button class="btn small" id="orientReset">Reset orientation</button>
+        </div>
         <ul class="info" id="modelInfo"><li class="muted">No model loaded.</li></ul>
+      </details>
+
+      <details open>
+        <summary>Auto-segment</summary>
+        <p class="muted small">Finds overhangs and proposes cuts. They show up in the Cuts list below, where you can check and change them before slicing.</p>
+        <div class="settings-grid">
+          <label>Direction step (°)<input type="number" data-setting="auto_segment.candidate_step_deg" step="1" min="5"></label>
+          <label>Max depth<input type="number" data-setting="auto_segment.max_depth" step="1" min="1"></label>
+          <label>Tilt weight (mm²/°)<input type="number" data-setting="auto_segment.weight_tilt" step="0.1" min="0"></label>
+          <label>Parent-overhang weight<input type="number" data-setting="auto_segment.weight_parent_overhang" step="0.1" min="0"></label>
+          <label>Min region (mm²)<input type="number" data-setting="overhang.min_region_area" step="1" min="0"></label>
+          <label>Cut margin (mm)<input type="number" data-setting="auto_segment.cut_margin" step="0.1" min="0"></label>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="autoRun">Auto-segment</button>
+          <span id="autoProgress" class="muted small"></span>
+        </div>
+        <ul class="info" id="autoResults"></ul>
+        <details class="sub" id="autoLogBox" hidden>
+          <summary>Decision log</summary>
+          <pre class="log" id="autoLog"></pre>
+        </details>
       </details>
 
       <details>
@@ -152,6 +178,39 @@
       <details open>
         <summary>Segments</summary>
         <div id="segmentsBody" class="muted">No model loaded.</div>
+      </details>
+
+      <details open>
+        <summary>Slice &amp; export</summary>
+        <div class="settings-grid">
+          <label>Layer height (mm)<input type="number" data-setting="slicing.layer_height" step="0.05" min="0.05"></label>
+          <label>Line width (mm)<input type="number" data-setting="slicing.line_width" step="0.05" min="0.1"></label>
+          <label>Perimeters<input type="number" data-setting="slicing.perimeters" step="1" min="0"></label>
+          <label>Top/bottom layers<input type="number" data-setting="slicing.top_bottom_layers" step="1" min="0"></label>
+          <label>Infill (0–1)<input type="number" data-setting="slicing.infill_density" step="0.05" min="0" max="1"></label>
+          <label>Print speed (mm/s)<input type="number" data-setting="slicing.print_speed" step="5" min="1"></label>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="sliceRun">Slice + check collisions</button>
+          <span id="sliceProgress" class="muted small"></span>
+        </div>
+        <ul class="info" id="sliceStats"></ul>
+        <div id="issueBox"></div>
+        <div class="row">
+          <button class="btn" id="gcodeDownload" disabled>Download G-code</button>
+        </div>
+        <div id="previewBox" hidden>
+          <label class="check"><input type="checkbox" id="showToolpaths" checked> Show toolpaths</label>
+          <div class="slider-row">
+            <label for="stepSlider">Layer</label>
+            <input type="range" id="stepSlider" min="0" value="0" step="1">
+            <output id="stepOut"></output>
+          </div>
+          <div class="muted small" id="stepLabel"></div>
+          <div class="row">
+            <button class="btn" id="animPlay">▶ Play machine animation</button>
+          </div>
+        </div>
       </details>
 
       <details>

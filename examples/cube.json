@@ -1,0 +1,45 @@
+{
+  "app": "RDH5AxisSlicer",
+  "version": 2,
+  "model": {
+    "demo": "Cube"
+  },
+  "place_on_bed": true,
+  "base_rotation": null,
+  "settings": {
+    "overhang": {
+      "threshold_deg": 50,
+      "min_region_area": 20
+    },
+    "auto_segment": {
+      "candidate_step_deg": 15,
+      "max_depth": 3,
+      "cut_margin": 0,
+      "weight_parent_overhang": 1,
+      "weight_tilt": 0.5,
+      "max_cuts": 12
+    },
+    "orientation": {
+      "sphere_samples": 64,
+      "min_contact_area": 25
+    },
+    "slicing": {
+      "layer_height": 0.2,
+      "line_width": 0.45,
+      "perimeters": 2,
+      "top_bottom_layers": 3,
+      "infill_density": 0.2,
+      "infill_angle_deg": 45,
+      "filament_diameter": 1.75,
+      "print_speed": 40,
+      "first_layer_speed": 20,
+      "travel_speed": 120,
+      "retract_min_travel": 2
+    },
+    "collision_check": {
+      "points_per_layer": 6,
+      "rotation_steps": 12
+    }
+  },
+  "cuts": []
+}

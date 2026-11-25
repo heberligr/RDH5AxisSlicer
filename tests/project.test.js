@@ -13,12 +13,14 @@ test('round trip with an embedded STL', () => {
   const p = new Project({
     stlName: 'box.stl',
     stlBuffer: exportSTL(TriMesh.box([10, 10, 10])),
-    overhangAngleDeg: 45,
+    baseRotation: [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
     cuts: [new Cut([1, 2, 3], [0, 0, 2], { local: true, components: [1], name: 'arm' })],
   });
   const back = Project.parse(p.serialize());
   assert.equal(back.stlName, 'box.stl');
-  assert.equal(back.overhangAngleDeg, 45);
+  back.overhangAngleDeg = 45;
+  assert.equal(back.settings.overhang.threshold_deg, 45);
+  assert.deepEqual(back.baseRotation, [[0, -1, 0], [1, 0, 0], [0, 0, 1]]);
   const c = back.cuts[0];
   approx(c.point, [1, 2, 3]);
   approx(c.normal, [0, 0, 1]); // normalised
@@ -37,4 +39,10 @@ test('round trip with a demo part', () => {
 test('bad project files give clear errors', () => {
   assert.throws(() => Project.parse('{"version": 2, "model": {}}'), /no model/);
   assert.throws(() => Project.parse('{"version": 99, "model": {"demo": "Cube"}}'), /newer version/);
+});
+
+test('old project files (overhang_angle_deg only) still load', () => {
+  const back = Project.parse('{"version": 2, "model": {"demo": "Cube"}, "overhang_angle_deg": 40}');
+  assert.equal(back.settings.overhang.threshold_deg, 40);
+  assert.equal(back.settings.slicing.layer_height, 0.2);
 });

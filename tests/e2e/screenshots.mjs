@@ -34,6 +34,8 @@ const shot = async (name) => {
 try {
   await page.goto('http://localhost:8124/');
   await page.waitForSelector('body[data-ready="true"]', { timeout: 30000 });
+  page.on('dialog', (d) => d.accept());
+  const openSection = (name) => page.locator('details', { hasText: name }).first().locator('summary').click();
 
   // 1. T-shape with no cuts, seen from low down so the red undersides show.
   await page.selectOption('#demoSelect', 'T-shape');
@@ -41,20 +43,29 @@ try {
   await camera([70, -95, 12], [0, 0, 24]);
   await shot('overhangs');
 
-  // 2. The finished example: 3 segments.
-  await page.locator('details', { hasText: 'Project' }).first().locator('summary').click();
-  await page.click('#exampleLoad');
-  await page.waitForFunction(() => document.querySelector('#segmentsBody').innerText.includes('3 segment(s)'));
-  await page.locator('details', { hasText: 'Project' }).first().locator('summary').click();
+  // 2. Auto-segment it: 3 segments.
+  await page.click('#autoRun');
+  await page.waitForFunction(() => document.querySelector('#autoResults').innerText.includes('proposed'));
   await camera([80, -110, 55], [0, 0, 22]);
   await shot('segments');
 
-  // 3. Machine view of segment 1 with the hotend.
-  await page.locator('.cut-list li').first().click();
-  await page.locator('details', { hasText: 'Hotend / IK test' }).locator('summary').click();
-  await page.click('#toolAim');
-  await page.check('#machineView');
-  await camera([150, -190, 70], [0, -20, 10]);
+  // 3. Slice: toolpaths, part-way through the last segment.
+  await page.click('#sliceRun');
+  await page.waitForFunction(() => document.querySelector('#sliceStats').innerText.includes('collision'), null, { timeout: 120000 });
+  await page.evaluate(() => {
+    const plan = window.slicer.state.plan;
+    plan.step = plan.steps.length - 40;
+    window.slicer.renderAll();
+  });
+  await page.locator('#sliceStats').scrollIntoViewIfNeeded();
+  await camera([70, -95, 60], [0, 0, 24]);
+  await shot('toolpaths');
+
+  // 4. Machine animation while printing the first tilted segment.
+  await page.click('#animPlay');
+  await page.waitForTimeout(8600);
+  await camera([120, -170, 60], [0, -10, 15]);
+  await page.waitForTimeout(150);
   await shot('machine_view');
 } finally {
   await browser.close();

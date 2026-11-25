@@ -11,7 +11,8 @@
  *     "app": "RDH5AxisSlicer", "version": 2,
  *     "model": { "demo": "T-shape" },          // or { "stl_name": "x.stl", "stl_base64": "..." }
  *     "place_on_bed": true,
- *     "overhang_angle_deg": 50,
+ *     "base_rotation": [[1,0,0],[0,1,0],[0,0,1]],   // from Auto-orient (optional)
+ *     "settings": { ...same layout as config/settings.yaml... },
  *     "cuts": [ { "name": "", "point": [5,0,34], "normal": [1,0,0], "local": false, "components": null } ]
  *   }
  */
@@ -19,18 +20,32 @@
 import { DEMO_MODELS } from './demoModels.js';
 import { arrayBufferToBase64, base64ToArrayBuffer, parseSTL, placeOnBed } from './meshIO.js';
 import { Cut } from './segments.js';
+import { DEFAULT_SETTINGS, settingsFromObject } from './settings.js';
 
 export const PROJECT_VERSION = 2;
 
+/** Settings stored in a project file (older files only had overhang_angle_deg). */
+function projectSettings(data) {
+  const settings = settingsFromObject(data.settings ?? {});
+  if (!data.settings && data.overhang_angle_deg !== undefined) settings.overhang.threshold_deg = Number(data.overhang_angle_deg);
+  return settings;
+}
+
 export class Project {
-  constructor({ demoName = null, stlName = null, stlBuffer = null, placeOnBed = true, overhangAngleDeg = 50, cuts = [] } = {}) {
+  constructor({ demoName = null, stlName = null, stlBuffer = null, placeOnBed = true, baseRotation = null,
+    settings = DEFAULT_SETTINGS, cuts = [] } = {}) {
     this.demoName = demoName;   // name in DEMO_MODELS, or null
     this.stlName = stlName;     // original file name of an uploaded STL
     this.stlBuffer = stlBuffer; // raw STL bytes (ArrayBuffer)
     this.placeOnBed = placeOnBed;
-    this.overhangAngleDeg = overhangAngleDeg;
+    this.baseRotation = baseRotation; // 3x3 rotation applied before placing (null = as loaded)
+    this.settings = structuredClone(settings);
     this.cuts = cuts;
   }
+
+  /** Overhang threshold (degrees) - a shortcut into the settings. */
+  get overhangAngleDeg() { return this.settings.overhang.threshold_deg; }
+  set overhangAngleDeg(v) { this.settings.overhang.threshold_deg = v; }
 
   /** Human-readable name of the model. */
   get modelLabel() {
@@ -48,6 +63,7 @@ export class Project {
     } else {
       throw new Error('Project has no model');
     }
+    if (this.baseRotation) mesh = mesh.transformed(this.baseRotation);
     return this.placeOnBed ? placeOnBed(mesh, machine) : mesh;
   }
 
@@ -62,7 +78,8 @@ export class Project {
         version: PROJECT_VERSION,
         model,
         place_on_bed: this.placeOnBed,
-        overhang_angle_deg: this.overhangAngleDeg,
+        base_rotation: this.baseRotation,
+        settings: this.settings,
         cuts: this.cuts.map((c) => c.toJSON()),
       },
       null,
@@ -81,7 +98,8 @@ export class Project {
       stlName: model.stl_name ?? null,
       stlBuffer: model.stl_base64 ? base64ToArrayBuffer(model.stl_base64) : null,
       placeOnBed: data.place_on_bed ?? true,
-      overhangAngleDeg: Number(data.overhang_angle_deg ?? 50),
+      baseRotation: data.base_rotation ?? null,
+      settings: projectSettings(data),
       cuts: (data.cuts ?? []).map(Cut.fromJSON),
     });
   }

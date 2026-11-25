@@ -143,5 +143,5 @@ test('linear limit check', () => {
   const m = loadMachine();
   assert.equal(outsideLinearLimits([0, 0, 10], m), false);
   assert.equal(outsideLinearLimits([500, 0, 10], m), true);
-  assert.equal(outsideLinearLimits([0, 0, -1], m), true);
+  assert.equal(outsideLinearLimits([0, 0, -100], m), true);
 });

@@ -1,6 +1,6 @@
 {
   "name": "rdh5axisslicer",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "3+2 segmented slicer for a DIY 5-axis FDM printer - runs in the browser",
   "type": "module",
   "private": true,

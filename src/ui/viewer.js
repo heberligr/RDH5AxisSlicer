@@ -201,6 +201,57 @@ export class Viewer {
     this._set('picked', ball);
   }
 
+  /** Make the segment meshes see-through (used while showing toolpaths). */
+  setGhost(ghost) {
+    const group = this.objects.segments;
+    if (!group) return;
+    group.traverse((o) => {
+      if (!o.material) return;
+      o.material.transparent = ghost;
+      o.material.opacity = ghost ? (o.isLineSegments ? 0.08 : 0.12) : (o.isLineSegments ? 0.35 : 1);
+      o.material.depthWrite = !ghost;
+      o.material.needsUpdate = true;
+    });
+  }
+
+  /**
+   * Toolpaths as coloured lines.
+   * @param {{positions: Float32Array, colors: Float32Array, stepEnds: number[]}|null} paths
+   *   pairs of points (one line each); stepEnds[k] = vertex count up to step k.
+   */
+  setToolpaths(paths) {
+    if (!paths) return this._set('toolpaths', null);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(paths.positions, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(paths.colors, 3));
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
+    lines.userData.stepEnds = paths.stepEnds;
+    this._set('toolpaths', lines);
+  }
+
+  /** Show toolpaths up to and including step k (a step = one layer of one segment). */
+  setToolpathStep(k) {
+    const lines = this.objects.toolpaths;
+    if (!lines) return;
+    const ends = lines.userData.stepEnds;
+    lines.geometry.setDrawRange(0, k < 0 ? 0 : ends[Math.min(k, ends.length - 1)]);
+  }
+
+  /** Small spheres marking problem spots. name lets several sets coexist. */
+  setMarkers(name, points, color = 0xef4444, radius = 1.6) {
+    if (!points || !points.length) return this._set(`markers:${name}`, null);
+    const group = new THREE.Group();
+    const geo = new THREE.SphereGeometry(radius, 16, 12);
+    for (const p of points) {
+      const m = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.9 }));
+      m.position.set(...p);
+      m.renderOrder = 10;
+      group.add(m);
+    }
+    geo.dispose();
+    this._set(`markers:${name}`, group);
+  }
+
   /**
    * Machine view: tilt everything by the table rotation R (3x3) about the
    * pivot, i.e. machine = R (p - pivot) + pivot. Pass null for the part view.

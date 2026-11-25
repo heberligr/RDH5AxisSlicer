@@ -17,3 +17,8 @@ export function approx(actual, expected, tol = 1e-9, msg = '') {
   }
   assert.ok(Math.abs(actual - expected) <= tol, `${msg} expected ${expected}, got ${actual} (tol ${tol})`);
 }
+
+import { parseSettingsYaml } from '../src/core/settings.js';
+export const SETTINGS_YAML = readFileSync(new URL('../config/settings.yaml', import.meta.url), 'utf8');
+/** A fresh copy of the default settings. */
+export const loadSettings = () => parseSettingsYaml(SETTINGS_YAML);

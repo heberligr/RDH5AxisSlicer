@@ -7,135 +7,185 @@
 Nothing to install: the link opens the app. It starts with an example already
 cut into segments.
 
-| Overhangs flagged in red | Cut into segments | Machine view of segment 1 |
-|---|---|---|
-| ![](docs/overhangs.png) | ![](docs/segments.png) | ![](docs/machine_view.png) |
-
-**Status:** milestones 1–2 (math core and manual segment editor). Automatic
-segmentation, slicing and G-code output are next.
+| 1. Overhangs flagged | 2. Auto-segmented | 3. Sliced | 4. Machine animation |
+|---|---|---|---|
+| ![](docs/overhangs.png) | ![](docs/segments.png) | ![](docs/toolpaths.png) | ![](docs/machine_view.png) |
 
 ## The idea
 
 A normal printer builds everything straight up, so anything sticking out
-sideways (an overhang) needs support material. This printer has a tilting
-(A) and rotating (C) table, so the part can be **cut into chunks (segments)**,
-each printed with flat layers in its own direction:
+sideways (an overhang) needs support material. This printer has a tilting (A)
+and rotating (C) table, so the part can be **cut into chunks (segments)**, each
+printed with flat layers in its own direction:
 
-1. Load a part. Faces that would need support are shown **red**.
-2. Add **cuts**. Each cut is a plane, and its normal is the build direction of
-   the new segment on that side.
-3. The app splits the part into watertight segments and works out which one
-   rests on which, and therefore the **print order**. It also computes the
-   **A/C table angles** for each segment and checks that the **hotend won't
-   hit** anything.
-4. While printing a segment the rotary axes never move. They only turn
-   between segments.
+1. **Load** a part. Faces that would need support are shown in red.
+2. **Auto-segment** proposes cut planes. Each cut's normal is the build
+   direction of the new segment above it. You can edit, add or delete cuts.
+3. **Slice.** Each segment is turned so its direction points up, sliced into
+   flat layers, and mapped back.
+4. **Check & export.** One G-code file. The table only turns *between*
+   segments; while printing, every move is plain X Y Z E. The hotend is
+   checked against everything already printed.
 
-## Using it
+## A first print, step by step
 
-| What | How |
-|---|---|
-| Open your own part | **Open STL…**, or drag an `.stl` onto the 3D view |
-| Try a built-in part | **Demo part** → Cube / Cube with arm / T-shape → **Load demo** |
-| Add a cut | **Add cut**, then set the point and normal (sliders or numbers) |
-| Snap a cut to a face | Click a face in the 3D view, then **Normal ← face** / **Point ← picked** |
-| Local cut | Tick **Local cut** to move only the piece(s) you choose |
-| Reorder / delete | ▲ ▼ **Delete** on the selected cut (order matters, see below) |
-| Save your work | **Project → Save project** downloads one `.json` file (your STL is stored inside it) |
-| Reopen | **Project → Open project…**, or drag the `.json` onto the view |
-| Check a segment's angles | **Hotend / IK test → Aim at selected cut**, then tick **Machine view** |
-| Use your machine's numbers | **Machine → Load machine.yaml…** (or edit `config/machine.yaml` in the repo) |
+> The machine numbers in `config/machine.yaml` are placeholders until the
+> hardware is built. Do steps 1–2 before printing anything real.
 
-### How cuts behave
+1. **Describe the machine.** Fill in every `FILL IN` value in
+   `config/machine.yaml` (see below). Edit it on GitHub with the pencil icon,
+   and the site updates within a couple of minutes. To try values without
+   changing the repo, use **Machine → Load machine.yaml…** in the app.
+2. **Calibrate the pivot** (next section). This is the single most important
+   number.
+3. **Open the part:** **Open STL…** or drag it onto the view.
+4. **Orientation:** click **Auto-orient**. It tries every big flat face down
+   (plus 64 other directions) and keeps the one with the least overhang. If you
+   prefer the original, click **Reset orientation**.
+5. **Auto-segment.** Look at the result. Each coloured chunk is a segment, the
+   Segments panel lists the print order and A/C angles, and the **Decision
+   log** explains every choice. Any overhang it couldn't fix is listed in red
+   with "needs supports or manual cut".
+6. **Fix by hand if needed:** select a cut and change its point/normal, or
+   click a face and use **Normal ← face** / **Point ← picked**. Use **Local
+   cut** when only one of several pieces should move. The Segments panel must
+   say **✓ Cuts form a valid print order** before you can slice.
+7. **Slice + check collisions.** Read the summary. Any collision is listed
+   with a **Show** button that jumps the layer slider there. Drag the
+   **Layer** slider through the print, then press **▶ Play machine animation**
+   to watch the table turn between segments.
+8. **Save project** (keeps your cuts and settings) and **Download G-code**.
+9. **First real test:** print `examples/cube_with_arm.json` in the air
+   (no filament, Z raised) and watch that the table turns the way the
+   animation shows. Then print it for real.
 
-- A cut only splits the segment that **contains its point**. A plane that
-  passes through other segments leaves them alone.
-- **Normal cut:** everything on the normal's side becomes the new segment.
-- **Local cut:** that side can be several separate pieces (e.g. two posts).
-  Only the ticked piece(s) move, and the rest stay with the segment that was
-  cut.
-- Cuts are applied in list order, so **▲ ▼ can change the result**.
-- **Print order** comes from the geometry: each segment's flat base face rests
-  on some other segment, and that one prints first.
-- The Segments panel warns about cuts that are skipped, pieces printing in
-  mid-air, segments that depend on each other in a loop, and directions
-  beyond the A-axis limits.
+## Calibrating the pivot point
 
-**Overhang rule:** with build direction `d`, a face is an overhang when its
-normal is within `90° − threshold` of `−d`. The default threshold is 50°, so
-faces leaning more than 50° from vertical count. Faces sitting on a segment's
-own base never count.
+The pivot is where the A and C axes cross, in machine coordinates. Every
+tilted segment is placed relative to it, so an error of 1 mm here puts tilted
+segments 1 mm off.
+
+1. **Find the C axis centre (X, Y).** Home, then put a sharp pointer (or the
+   nozzle) on a mark near the table centre. Rotate C by 180°. If the mark
+   moved, the centre is halfway between the two positions. Repeat until the
+   mark doesn't move. The machine X, Y now equals `pivot[0]`, `pivot[1]`.
+2. **Find the A axis height (Z).** Clamp a block to the table and touch its
+   flat top with the nozzle at A = 0, then note the Z reading, *z0*. Tilt to
+   A = 90°. The top face is now a vertical wall, and its distance from the
+   pivot hasn't changed. Touch the wall from the side and read its Y
+   position, *y1*. Then `pivot_z = z0 − |y1 − pivot_y|`, using `pivot_y` from
+   step 1. Measuring again at A = −90° and averaging cancels small errors.
+3. **Check:** in the app, **Hotend / IK test** → set a tip point, tick
+   **Machine view**, and compare the shown "Tip in machine XYZ" with what the
+   machine reads when you jog to the same physical spot at that A/C.
+4. **Signs:** jog A positive. If the table top turns toward −Y (right-hand
+   rule about +X), `a_axis.sign: 1`, otherwise `-1`. Same for C: positive =
+   counter-clockwise seen from above means `sign: 1`.
 
 ## Your machine: `config/machine.yaml`
 
-Every value marked **FILL IN** is a placeholder until the hardware exists.
-Edit the file in the repo (GitHub's pencil icon works) and the site updates
-within a minute or two. To try other numbers without changing the repo, use
-**Machine → Load machine.yaml…**.
-
 | Key | What it is |
 |---|---|
+| `firmware` | marlin / reprapfirmware / klipper. Output is plain X Y Z A C joint moves (no TCP mode) |
 | `kinematics.pivot` | Machine XYZ where the A and C axes cross |
 | `kinematics.*.sign` | `1` if a positive G-code angle turns the table by the right-hand rule, `-1` otherwise |
-| `kinematics.*.min_deg/max_deg` | Rotary travel limits, in G-code (commanded) degrees |
-| `table.*` | Rotary table size, and Z of its top surface at A = 0 |
-| `hotend.*` | Collision envelope: a cone at the tip plus a cylinder for the heater block / fan |
+| `kinematics.*.min_deg/max_deg` | Rotary travel limits, in G-code degrees (C can be `continuous`) |
+| `limits` | X/Y/Z travel. Every G-code point is checked; anything outside stops export with a clear error |
+| `table.*` | Rotary table size, and Z of its top at A = 0 (it's an obstacle in collision checks) |
+| `hotend.*` | Collision envelope: a cone at the tip plus a cylinder for the heater block / fan. Make it a bit bigger than reality |
+| `motion.*` | Safe retract distance and safe Z for transitions, feedrates, retraction |
+| `start_gcode` / `end_gcode` | Copied into the file verbatim (homing, heating, prime line at A0 C0) |
+
+## Tuning auto-segmentation (`config/settings.yaml`, or the panel)
+
+For every overhang region, the auto-segmenter tries build directions spaced
+`candidate_step_deg` apart over the hemisphere that the A axis can reach. For
+each direction it puts a cut plane just under the region, makes a **local**
+cut (only the piece holding the overhang moves), and scores it:
+
+```
+score = overhang left in the new segment            (mm²)
+      + weight_parent_overhang × new overhang created in the parent
+      + weight_tilt × tilt angle (degrees)
+```
+
+It keeps the lowest score whose first layer the hotend can reach without
+hitting anything, but only if it beats leaving the region alone
+(score < region area). It then repeats for new segments, up to `max_depth`.
+
+| Setting | Raise it to… | Lower it to… |
+|---|---|---|
+| `overhang.threshold_deg` (50) | allow steeper overhangs (fewer cuts) | be stricter (more cuts) |
+| `overhang.min_region_area` (20 mm²) | ignore small overhangs | fix tiny ones too |
+| `auto_segment.weight_tilt` (0.5) | prefer gentle tilts, and leave small overhangs alone | allow steep tilts more readily |
+| `auto_segment.weight_parent_overhang` (1) | avoid cuts that create overhangs elsewhere | — |
+| `auto_segment.candidate_step_deg` (15) | search faster | search finer (slower) |
+| `auto_segment.max_depth` (3) | allow cuts on cuts | keep segment trees shallow |
+| `auto_segment.cut_margin` (0 mm) | leave some parent under the new segment | cut exactly at the overhang |
+
+A region of *A* mm² is only worth a cut if `weight_tilt × tilt < A`. With the
+defaults, a 45° cut costs 22.5, so overhangs smaller than that stay as they
+are. Every decision is in the **Decision log**.
 
 ## How the math works
 
 **Kinematics.** The part sits on the C table, and the C table sits on the A
 trunnion, so a part point `p` ends up at
+`machine = R_A(a) · R_C(c) · (p − pivot) + pivot`. For a build direction `d`,
+the inverse kinematics finds `c = 90° − atan2(dy, dx)` and
+`a = atan2(√(dx²+dy²), dz)`, so that `R_A R_C d = +Z`. The mirror solution
+(`−a`, `c − 180°`) is used when it fits the limits better or saves C travel.
 
-```
-machine = R_A(a) · R_C(c) · (p − pivot) + pivot
-```
+**Slicing.** Each segment is rotated with exactly that table rotation, so the
+slicer's coordinates are the machine's, minus the pivot shift. There's no
+unknown "the slicer moved my part" offset. Layers come from manifold's
+`slice()`, perimeters are insets of the outline, and infill is straight lines,
+solid within `top_bottom_layers` of any top or bottom.
 
-For a segment with build direction `d`, the inverse kinematics (IK) finds `a`
-and `c` with `R_A R_C d = +Z`, so that segment's layers are horizontal under
-the nozzle:
-
-1. Turn C so `d` lies in the YZ plane: `c = 90° − atan2(dy, dx)`.
-2. Tilt A by the angle between `d` and vertical: `a = atan2(√(dx²+dy²), dz)`.
-
-There's always a mirror solution (`a → −a`, `c → c − 180°`). The code keeps
-whichever is inside the limits with the smaller C move.
+**G-code.** Relative extrusion (M83). Each transition does: retract → back
+off along the tool axis → safe Z → `G0 A… C…` → above the next start → down
+→ unretract.
 
 **Collision check.** Obstacles (the table, and segments already printed) are
-turned into points spread ~1 mm apart over their surfaces. For a nozzle
-position, those points are rotated into the tool's frame and tested against
-the cone + cylinder. The shape is grown slightly so nothing slips between the
-points, so the check errs on the safe side.
-
-**Cutting** uses [manifold-3d](https://github.com/elalish/manifold), compiled
-to WebAssembly. It keeps every segment a closed, watertight solid.
+sampled into points ~1 mm apart. The hotend (cone + cylinder, grown slightly
+so nothing slips between points) is tested at several points on *every*
+layer, while the table turns (nothing may rise to safe Z), and on the way
+down to each segment.
 
 ## Code map
 
 ```
-index.html, style.css     the page (GitHub Pages serves these directly; no build step)
+index.html, style.css     the page (GitHub Pages serves it as-is; no build step)
 config/machine.yaml       your machine
-examples/                 saved example projects
+config/settings.yaml      default slicer settings
+examples/                 projects made by Auto-segment (tools/make-examples.mjs)
 src/core/                 all the logic - plain JavaScript, no browser needed
-  vec.js, transforms.js   vectors, rotations (direction -> +Z and back)
-  config.js               machine.yaml -> validated object, clear errors
+  vec.js, transforms.js   vectors, rotations
+  config.js, settings.js  YAML -> validated objects with clear errors
   kinematics.js           A/C inverse kinematics, part <-> machine coordinates
-  collision.js            hotend cone + cylinder, sampled-surface collision check
+  collision.js            hotend cone + cylinder, sampled-surface collision test
   mesh.js, meshIO.js      triangle mesh, STL read/write, placing on the table
-  geometry.js             plane cuts and unions (manifold-3d), point-in-mesh, distances
-  overhang.js             which faces are overhangs
+  geometry.js             plane cuts and unions (manifold-3d), point-in-mesh
+  overhang.js             overhang faces and connected overhang regions
+  orientation.js          Auto-orient
   segments.js             cuts -> segments, local cuts, print order, warnings
-  project.js              save/load projects as JSON
+  autoSegment.js          Auto-segment (scored search + decision log)
+  slicer.js               per-segment planar slicing (walls, solid, infill)
+  gcode.js                machine G-code, transitions, limit checks
+  checks.js               full collision check before export
+  project.js              save/load projects (.json, STL embedded)
   demoModels.js           cube, cube with arm, T-shape
 src/ui/
   viewer.js               the 3D view (three.js)
-  app.js                  the side panel and app state
-tests/                    unit tests (Node) + tests/e2e browser test
+  app.js                  model, cut editor, segments, hotend test
+  pipeline.js             auto-orient/segment, slice, preview, animation
+tests/                    unit + pipeline tests (Node); tests/e2e drives the real page
 ```
 
 ## For development (optional)
 
-The app itself needs nothing installed. To run the tests, install
-[Node.js](https://nodejs.org) 20 or newer, then:
+The app needs nothing installed. To run the tests, install
+[Node.js](https://nodejs.org) 20+ and run:
 
 ```bash
 npm install
@@ -145,11 +195,20 @@ npm install
 npm test
 ```
 
-`npm run serve` serves the app at http://localhost:8123 so you can try
-changes before pushing. `npm run test:e2e` drives the real page in a headless
-browser (needs Playwright with Chromium). `npm run docs:screenshots`
-regenerates the images above.
+- `npm run serve` serves the app at http://localhost:8123.
+- `npm run test:e2e` drives the page in headless Chromium (needs Playwright).
+- `npm run docs:screenshots` regenerates the images above.
+- `node tools/make-examples.mjs` regenerates the example projects.
 
-Libraries (three.js, manifold-3d, js-yaml) load from the jsDelivr CDN at
-exact pinned versions, set in the `importmap` in `index.html`. The test setup
-in `package.json` pins the same versions.
+Libraries (three.js, manifold-3d, js-yaml) load from jsDelivr at exact pinned
+versions, set in the `importmap` in `index.html`. `package.json` pins the
+same versions for tests.
+
+## Limitations
+
+- The slicer is deliberately simple: rectilinear infill, no seams, no bridges,
+  no supports. Regions the auto-segmenter can't fix are reported, not
+  supported.
+- The collision check is conservative and uses a simple hotend shape. It does
+  not model the gantry or frame.
+- The machine geometry is placeholders until the printer exists.

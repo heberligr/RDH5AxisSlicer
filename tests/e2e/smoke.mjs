@@ -21,6 +21,7 @@ const page = await browser.newPage({ viewport: { width: 1500, height: 900 }, dev
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('dialog', (d) => d.accept()); // "replace existing cuts?" prompts
 
 await page.route('https://cdn.jsdelivr.net/npm/**', async (route) => {
   const m = new URL(route.request().url()).pathname.match(/^\/npm\/((?:@[^/]+\/)?[^@/]+)@[^/]+\/(.*)$/);
@@ -81,7 +82,44 @@ try {
     await page.waitForFunction(() => document.querySelector('#segmentsBody').innerText.includes('A-axis limits'));
   });
 
-  await step('6_mobile', async () => {
+  await step('6_auto_segment', async () => {
+    await page.uncheck('#toolShow');
+    await page.selectOption('#demoSelect', 'T-shape');
+    await page.click('#demoLoad');
+    await page.click('#autoRun');
+    await page.waitForFunction(() => document.querySelector('#autoResults').innerText.includes('cut(s) proposed'), null, { timeout: 60000 });
+    assert.match(await page.locator('#autoResults').innerText(), /2 cut\(s\) proposed/);
+    const text = await segmentsText();
+    assert.match(text, /3 segment\(s\)/);
+    assert.match(text, /valid print order/);
+    assert.match(await page.locator('#autoLog').textContent(), /cut along/);
+  });
+
+  await step('7_slice_preview', async () => {
+    await page.click('#sliceRun');
+    await page.waitForFunction(() => document.querySelector('#sliceStats').innerText.includes('No collisions'), null, { timeout: 120000 });
+    const stats = await page.locator('#sliceStats').innerText();
+    assert.match(stats, /3 segment\(s\), \d+ layers, 3 table rotation/);
+    await page.locator('#stepSlider').fill('150');
+    assert.match(await page.locator('#stepLabel').innerText(), /Print step 151\//);
+  });
+
+  await step('8_gcode_download', async () => {
+    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#gcodeDownload')]);
+    assert.equal(download.suggestedFilename(), 'T-shape.gcode');
+    const text = readFileSync(await download.path(), 'utf8');
+    assert.match(text, /; ===== SEGMENT 1: A/);
+    assert.ok(text.split('\n').filter((l) => l.endsWith('; rotate table')).length === 3);
+  });
+
+  await step('9_animation', async () => {
+    await page.click('#animPlay');
+    await page.waitForTimeout(2600); // mid-way through the first rotation / print
+    assert.match(await page.locator('#animPlay').innerText(), /Stop/);
+  });
+
+  await step('10_mobile', async () => {
+    await page.click('#animPlay');
     await page.setViewportSize({ width: 390, height: 844 });
     await openExampleAgain();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

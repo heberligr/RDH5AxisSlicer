@@ -9,6 +9,8 @@
  */
 
 import { Viewer } from './viewer.js';
+import { initPipeline } from './pipeline.js';
+import { parseSettingsYaml } from '../core/settings.js';
 import { initGeometry } from '../core/geometry.js';
 import { parseMachineYaml } from '../core/config.js';
 import { DEMO_MODELS } from '../core/demoModels.js';
@@ -37,9 +39,11 @@ const SEGMENT_COLORS = [
 const segmentColor = (id) => SEGMENT_COLORS[id % SEGMENT_COLORS.length];
 const cssColor = (c) => `rgb(${c.map((x) => Math.round(x * 255)).join(',')})`;
 
+// Example projects (made by tools/make-examples.mjs with Auto-segment).
 const EXAMPLES = [
   { label: 'T-shape (3 segments)', file: 'examples/t_shape.json' },
   { label: 'Cube with arm (2 segments)', file: 'examples/cube_with_arm.json' },
+  { label: 'Plain cube (no cuts needed)', file: 'examples/cube.json' },
 ];
 
 const fmt = (x, d = 2) => (Math.abs(x) < 0.5 * 10 ** -d ? 0 : x).toFixed(d);
@@ -62,8 +66,12 @@ const state = {
   editAz: 0,
   tool: { show: false, tilt: 0, az: 0, tip: [0, 0, 10], machineView: false, segment: null },
   tableObstacle: null, // sampled table, built the first time the hotend test needs it
+  defaultSettings: null, // config/settings.yaml, used for new projects
+  autoResult: null,    // last Auto-segment result (log, remaining overhangs)
+  plan: null,          // last Slice result (toolpaths, G-code, collision report)
 };
 let viewer;
+let pipeline; // auto-segment / slice / preview panel (pipeline.js)
 
 // --------------------------------------------------------------------- //
 // Small UI helpers
@@ -94,8 +102,8 @@ function fillList(ul, lines) {
   }));
 }
 
-function download(filename, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+function download(filename, text, type = 'application/json') {
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -117,6 +125,7 @@ function setMachine(machine, label) {
   state.machine = machine;
   state.machineLabel = label;
   state.tableObstacle = null;
+  pipeline?.invalidate();
   viewer.setTable(tableMeshForMachine(machine), machine.kinematics.pivot);
   if (state.part) recompute();
   else renderAll();
@@ -132,6 +141,7 @@ function openProject(project) {
   state.selectedCut = project.cuts.length - 1;
   state.picked = null;
   state.tool.segment = null;
+  state.autoResult = null;
   const { min, max } = part.bounds();
   state.tool.tip = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, max[2]];
   syncAnglesFromCut();
@@ -161,7 +171,7 @@ async function openFile(file) {
       stlName: file.name,
       stlBuffer: buffer,
       placeOnBed: $('placeOnBed').checked,
-      overhangAngleDeg: state.project.overhangAngleDeg,
+      settings: state.project.settings,
     }), file.name);
   }
 }
@@ -177,6 +187,7 @@ async function openExample(path) {
 // Cuts
 // --------------------------------------------------------------------- //
 function recompute() {
+  pipeline?.invalidate(); // any sliced toolpaths are now out of date
   if (state.part) {
     try {
       state.seg = applyCuts(state.part, state.project.cuts, state.machine);
@@ -241,7 +252,8 @@ function renderScene() {
   })));
 
   const cut = currentCut();
-  if (cut && state.part) {
+  const showingToolpaths = Boolean(state.plan?.showToolpaths); // the plane would hide the layers
+  if (cut && state.part && !showingToolpaths) {
     const e = state.part.extents();
     const report = currentReport();
     viewer.setCutPlane({
@@ -253,6 +265,9 @@ function renderScene() {
   } else viewer.setCutPlane(null);
 
   viewer.setPicked(state.picked && !state.tool.machineView ? state.picked.point : null);
+
+  pipeline.renderScene();
+  if (pipeline.isAnimating()) return; // the animation drives the hotend and table itself
 
   // Hotend + machine view
   const t = state.tool;
@@ -346,6 +361,8 @@ function renderPanel() {
     status.push(res.hit ? [`COLLISION with ${res.obstacleName} (${res.numPoints} sample points)`, 'bad'] : ['No collision', 'good']);
   }
   fillList($('toolStatus'), status);
+
+  pipeline.renderPanel();
 
   // ---- Machine ----
   const k = machine.kinematics;
@@ -501,7 +518,7 @@ function wireEvents() {
   $('stlInput').addEventListener('change', (e) => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; });
   $('demoLoad').addEventListener('click', () => {
     const name = $('demoSelect').value;
-    tryOpen(() => new Project({ demoName: name, placeOnBed: $('placeOnBed').checked, overhangAngleDeg: state.project.overhangAngleDeg }), `demo: ${name}`);
+    tryOpen(() => new Project({ demoName: name, placeOnBed: $('placeOnBed').checked, settings: state.project.settings }), `demo: ${name}`);
   });
   const view = $('view');
   view.addEventListener('dragover', (e) => e.preventDefault());
@@ -637,13 +654,20 @@ function wireEvents() {
 // --------------------------------------------------------------------- //
 async function main() {
   viewer = new Viewer($('view'), { onPick });
+  pipeline = initPipeline({ state, viewer, $, toast, renderAll, recompute, segmentColor, download, fmt, fillList });
   $('demoSelect').replaceChildren(...Object.keys(DEMO_MODELS).map((n) => new Option(n, n)));
   $('demoSelect').value = 'T-shape';
   $('exampleSelect').replaceChildren(...EXAMPLES.map((e) => new Option(e.label, e.file)));
   wireEvents();
 
   try {
-    const [machine] = await Promise.all([loadDefaultMachine(), initGeometry()]);
+    const [machine, settingsText] = await Promise.all([
+      loadDefaultMachine(),
+      fetch('config/settings.yaml', { cache: 'no-cache' }).then((r) => r.text()),
+      initGeometry(),
+    ]);
+    state.defaultSettings = parseSettingsYaml(settingsText);
+    state.project = new Project({ settings: state.defaultSettings });
     setMachine(machine, state.machineLabel);
   } catch (err) {
     console.error(err);
@@ -655,7 +679,7 @@ async function main() {
   await openExample(EXAMPLES[0].file);
   document.body.dataset.ready = 'true'; // used by the automated browser test
   // Handy for poking around in the browser console (F12): slicer.state, slicer.viewer
-  window.slicer = { state, viewer, renderAll, recompute };
+  window.slicer = { state, viewer, renderAll, recompute, pipeline };
 }
 
 main();

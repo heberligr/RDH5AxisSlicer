@@ -198,3 +198,8 @@ export function facesOnPlane(mesh, point, normal, tol = 1e-3, facing = -1) {
   }
   return out;
 }
+
+/** Area shared by all the given 2D cross-sections (manifold CrossSection objects). */
+export function intersectSections(sections) {
+  return lib().CrossSection.intersection(sections);
+}

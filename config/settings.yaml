@@ -1,0 +1,41 @@
+# =============================================================================
+# settings.yaml - slicer settings (not machine geometry; that's machine.yaml).
+# These are the defaults for NEW projects. Each project saves its own copy, and
+# most of them can also be changed in the app.
+# =============================================================================
+
+overhang:
+  threshold_deg: 50        # faces leaning more than this from vertical are overhangs
+  min_region_area: 20      # mm^2 - smaller overhang regions are ignored
+
+auto_segment:
+  candidate_step_deg: 15   # spacing of candidate build directions on the hemisphere
+  max_depth: 3             # how many times a segment may be cut again
+  cut_margin: 0.0          # mm - cut plane sits this far below the overhang region.
+                           #   0 = exactly at its lowest point. Bigger values also
+                           #   take a sliver of the parent, which can run all the
+                           #   way down to the bed and block the hotend.
+  weight_parent_overhang: 1.0  # score cost per mm^2 of NEW overhang created in the parent
+  weight_tilt: 0.5         # score cost per degree of tilt (prefers gentler tilts)
+  max_cuts: 12             # safety limit
+
+orientation:
+  sphere_samples: 64       # extra directions tried besides "flat face down"
+  min_contact_area: 25     # mm^2 - orientations touching the bed less than this are rejected
+
+slicing:
+  layer_height: 0.2        # mm (first layer of every segment is the same)
+  line_width: 0.45         # mm
+  perimeters: 2
+  top_bottom_layers: 3     # solid layers at the top and bottom of every segment
+  infill_density: 0.2      # 0..1
+  infill_angle_deg: 45     # alternates +/- each layer
+  filament_diameter: 1.75  # mm
+  print_speed: 40          # mm/s
+  first_layer_speed: 20    # mm/s (first layer of each segment)
+  travel_speed: 120        # mm/s
+  retract_min_travel: 2.0  # mm - shorter travels don't retract
+
+collision_check:
+  points_per_layer: 6      # extrusion points tested per layer (spread along the layer)
+  rotation_steps: 12       # poses tested while A/C turn between segments

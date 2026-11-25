@@ -5,37 +5,76 @@
     "demo": "T-shape"
   },
   "place_on_bed": true,
-  "overhang_angle_deg": 50,
+  "base_rotation": null,
+  "settings": {
+    "overhang": {
+      "threshold_deg": 50,
+      "min_region_area": 20
+    },
+    "auto_segment": {
+      "candidate_step_deg": 15,
+      "max_depth": 3,
+      "cut_margin": 0,
+      "weight_parent_overhang": 1,
+      "weight_tilt": 0.5,
+      "max_cuts": 12
+    },
+    "orientation": {
+      "sphere_samples": 64,
+      "min_contact_area": 25
+    },
+    "slicing": {
+      "layer_height": 0.2,
+      "line_width": 0.45,
+      "perimeters": 2,
+      "top_bottom_layers": 3,
+      "infill_density": 0.2,
+      "infill_angle_deg": 45,
+      "filament_diameter": 1.75,
+      "print_speed": 40,
+      "first_layer_speed": 20,
+      "travel_speed": 120,
+      "retract_min_travel": 2
+    },
+    "collision_check": {
+      "points_per_layer": 6,
+      "rotation_steps": 12
+    }
+  },
   "cuts": [
     {
-      "name": "right bar",
-      "point": [
-        5,
-        0,
-        34
-      ],
-      "normal": [
-        1,
-        0,
-        0
-      ],
-      "local": false,
-      "components": null
-    },
-    {
-      "name": "left bar",
+      "name": "auto 1",
       "point": [
         -5,
-        0,
-        34
+        5,
+        30
       ],
       "normal": [
-        -1,
-        0,
-        0
+        -0.7071067811865475,
+        8.659560562354932e-17,
+        0.7071067811865476
       ],
-      "local": false,
-      "components": null
+      "local": true,
+      "components": [
+        0
+      ]
+    },
+    {
+      "name": "auto 2",
+      "point": [
+        5,
+        -5,
+        30
+      ],
+      "normal": [
+        0.9659258262890684,
+        0,
+        0.2588190451025208
+      ],
+      "local": true,
+      "components": [
+        0
+      ]
     }
   ]
 }
