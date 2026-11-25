@@ -38,6 +38,10 @@
     <section class="view" id="view">
       <div class="view-hint" id="viewHint">Drag to orbit · right-drag to pan · scroll to zoom · click a face to pick it · drop an STL here</div>
       <div class="toast" id="toast" hidden></div>
+      <div class="anim-caption" id="animCaption" hidden>
+        <div id="animCaptionText"></div>
+        <div class="anim-bar"><div id="animProgress"></div></div>
+      </div>
       <div class="loading" id="loading">
         <div class="spinner"></div>
         <div id="loadingText">Loading geometry engine…</div>
@@ -209,6 +213,12 @@
           <div class="muted small" id="stepLabel"></div>
           <div class="row">
             <button class="btn" id="animPlay">▶ Play machine animation</button>
+            <select id="animSpeed" aria-label="Animation speed" style="flex: 0 0 auto">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
           </div>
         </div>
       </details>

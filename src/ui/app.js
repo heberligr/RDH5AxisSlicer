@@ -457,11 +457,16 @@ function renderSegments() {
   intro.textContent = `${seg.segments.length} segment(s), in print order:`;
   const ul = document.createElement('ul');
   ul.className = 'seg-list';
+  // Angles are worked out in print order, each starting from the previous
+  // segment's pose - exactly like the G-code - so the numbers match it.
+  let prevPose = { a: 0, c: 0 };
   seg.order.forEach((id, step) => {
     const s = seg.segments[id];
     let ac;
     try {
-      const cmd = toCommanded(inverseKinematics(s.direction, state.machine), state.machine);
+      const pose = inverseKinematics(s.direction, state.machine, prevPose);
+      prevPose = pose;
+      const cmd = toCommanded(pose, state.machine);
       ac = `${k.a_axis.letter}${fmt(cmd.a, 1)} ${k.c_axis.letter}${fmt(cmd.c, 1)}`;
     } catch {
       ac = 'unreachable';

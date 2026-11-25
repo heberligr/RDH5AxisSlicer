@@ -113,8 +113,14 @@ try {
   });
 
   await step('9_animation', async () => {
+    // Every segment, with a pause before and after each tilt. Run at 4x speed.
+    await page.selectOption('#animSpeed', '4');
     await page.click('#animPlay');
-    await page.waitForTimeout(2600); // mid-way through the first rotation / print
+    const caption = (re) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector('#animCaptionText').textContent),
+      re.source, { timeout: 60000, polling: 30 });
+    for (const re of [/Printing segment 0/, /Pause - next: Segment 1/, /Tilting: A/, /Table locked/, /Printing segment 1/,
+      /Pause - next: Segment 2/, /Tilting: A/, /Table locked/, /Printing segment 2/])
+      await caption(re);
     assert.match(await page.locator('#animPlay').innerText(), /Stop/);
   });
 

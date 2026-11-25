@@ -16,7 +16,7 @@ import { autoSegment } from '../core/autoSegment.js';
 import { checkPlan } from '../core/checks.js';
 import { HotendModel } from '../core/collision.js';
 import { generateGcode } from '../core/gcode.js';
-import { machineToPart, tableRotation, toolDirectionInPart } from '../core/kinematics.js';
+import { machineToPart, partToMachine, tableRotation, toCommanded, toolDirectionInPart } from '../core/kinematics.js';
 import { chooseOrientation } from '../core/orientation.js';
 import { sliceAll, toPartFrame } from '../core/slicer.js';
 import { identity, matMul } from '../core/vec.js';
@@ -182,7 +182,7 @@ export function initPipeline(app) {
       const base = app.segmentColor(sl.segmentId);
       const wall = base.map((c) => c * 0.62);
       for (const L of sl.layers) {
-        let last = null;
+        let last = null, first = null;
         for (const p of L.paths) {
           const pts = p.points.map(([x, y]) => toPartFrame(sl, x, y, L.z));
           const col = p.closed ? wall : base;
@@ -192,10 +192,11 @@ export function initPipeline(app) {
               colors.set(col, v * 3);
               v++;
             }
+          first ??= pts[0];
           last = pts[pts.length - 1];
         }
         stepEnds.push(v);
-        steps.push({ order: k, segmentId: sl.segmentId, layer: L.index, nLayers: sl.layers.length, last });
+        steps.push({ order: k, segmentId: sl.segmentId, layer: L.index, nLayers: sl.layers.length, first, last });
       }
     });
     return { positions, colors, stepEnds, steps };
@@ -225,27 +226,95 @@ export function initPipeline(app) {
   }
 
   // ------------------------------------------------------------------ //
-  // Machine animation: the table turns between segments, layers appear.
+  // Machine animation: every segment in order. Between segments the nozzle
+  // lifts, the machine PAUSES, the table tilts, PAUSES again (locked), the
+  // nozzle travels over and comes down, then the layers are printed.
   // ------------------------------------------------------------------ //
   $('animPlay').addEventListener('click', () => (anim ? stopAnimation() : startAnimation()));
+
+  const lerp3 = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t);
+
+  /**
+   * A point from print step i: its first or last point. A layer can be empty
+   * (e.g. the very top slice of a segment), so look at neighbouring steps of
+   * the same segment until one has toolpaths.
+   */
+  function stepPoint(i, which, from = 0, to = Infinity) {
+    const steps = state.plan.steps;
+    const dir = which === 'first' ? 1 : -1;
+    for (let j = i; j >= from && j <= Math.min(to, steps.length - 1); j += dir) if (steps[j][which]) return steps[j][which];
+    for (let j = i; j >= from && j <= Math.min(to, steps.length - 1); j -= dir) if (steps[j][which === 'first' ? 'last' : 'first']) return steps[j][which === 'first' ? 'last' : 'first'];
+    return null;
+  }
+  const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) ** 2);
+  const angle = (x) => `${fmt(x, 1)}°`;
+
+  /** Build the list of phases. Each phase knows its duration and what to show. */
+  function buildTimeline(plan) {
+    const k = state.machine.kinematics;
+    const pivot = k.pivot;
+    const path = plan.gcode?.path ?? [];
+    const toMachine = (sl, partPoint) => partToMachine(partPoint, sl.pose, pivot);
+    // "Safe" height for the picture: high enough to clear everything, but not
+    // the real safe Z (often far above, which would put the nozzle off screen).
+    let top = -Infinity;
+    for (const sl of plan.sliced)
+      for (const s of plan.seg.segments)
+        for (let v = 0; v < s.mesh.numVerts; v += 3) top = Math.max(top, partToMachine(s.mesh.vertex(v), sl.pose, pivot)[2]);
+    const safeZ = Math.min(state.machine.motion.safe_z, top + state.machine.hotend.cylinder_start + 15);
+
+    const phases = [];
+    let prevPose = { a: 0, c: 0 }, step = 0;
+    let nozzle = null; // machine-frame nozzle position
+    const total = plan.sliced.length;
+    plan.sliced.forEach((sl, n) => {
+      const first = step, last = step + sl.layers.length - 1;
+      const firstPoint = toMachine(sl, stepPoint(first, 'first', first, last));
+      const descend = path.find((p) => p.type === 'descend' && p.segmentId === sl.segmentId)?.machine
+        ?? [firstPoint[0], firstPoint[1], firstPoint[2] + 10];
+      const cmd = toCommanded(sl.pose, state.machine), prevCmd = toCommanded(prevPose, state.machine);
+      const label = `Segment ${sl.segmentId} (${n + 1} of ${total})`;
+      const turn = Math.max(Math.abs(sl.pose.a - prevPose.a), Math.abs(sl.pose.c - prevPose.c));
+      if (!nozzle) nozzle = [descend[0], descend[1], safeZ];
+      const up = [nozzle[0], nozzle[1], safeZ];
+
+      if (n > 0) phases.push({ kind: 'move', pose: prevPose, from: nozzle, to: up, dur: 0.8, step: first - 1,
+        caption: `Segment ${plan.sliced[n - 1].segmentId} done - retract and lift the nozzle to safe Z` });
+      if (turn > 0.01) {
+        phases.push({ kind: 'move', pose: prevPose, from: up, to: up, dur: 1.0, step: first - 1, pause: true,
+          caption: `⏸ Pause - next: ${label}. Tilting the table to ${k.a_axis.letter}${angle(cmd.a)} ${k.c_axis.letter}${angle(cmd.c)}` });
+        phases.push({ kind: 'rotate', from: prevPose, to: sl.pose, at: up, dur: Math.max(1.6, turn / 40), step: first - 1,
+          caption: `↻ Tilting: ${k.a_axis.letter} ${angle(prevCmd.a)} → ${angle(cmd.a)},  ${k.c_axis.letter} ${angle(prevCmd.c)} → ${angle(cmd.c)}` });
+        phases.push({ kind: 'move', pose: sl.pose, from: up, to: up, dur: 1.0, step: first - 1, pause: true,
+          caption: `⏸ Table locked at ${k.a_axis.letter}${angle(cmd.a)} ${k.c_axis.letter}${angle(cmd.c)} - rotary axes stay still while ${label.toLowerCase()} prints` });
+      } else {
+        phases.push({ kind: 'move', pose: sl.pose, from: up, to: up, dur: 1.2, step: first - 1, pause: true,
+          caption: `⏸ ${label}: table stays at ${k.a_axis.letter}${angle(cmd.a)} ${k.c_axis.letter}${angle(cmd.c)}` });
+      }
+      const above = [descend[0], descend[1], safeZ];
+      phases.push({ kind: 'move', pose: sl.pose, from: up, to: above, dur: 0.6, step: first - 1, caption: `${label}: travel above the start point` });
+      phases.push({ kind: 'move', pose: sl.pose, from: above, to: firstPoint, dur: 0.7, step: first - 1, caption: `${label}: lower the nozzle and unretract` });
+      phases.push({ kind: 'print', pose: sl.pose, first, last, dur: Math.min(7, Math.max(3, sl.layers.length * 0.03)),
+        caption: (layer) => `▶ Printing ${label.toLowerCase()} - layer ${layer} of ${sl.layers.length} (pure X Y Z E moves)` });
+      nozzle = toMachine(sl, stepPoint(last, 'last', first, last));
+      prevPose = sl.pose;
+      step = last + 1;
+    });
+    phases.push({ kind: 'move', pose: prevPose, from: nozzle, to: [nozzle[0], nozzle[1], safeZ], dur: 2.0, step: step - 1,
+      caption: `✓ Done - ${total} segment(s), ${plan.gcode?.stats.rotations ?? total} table position(s)` });
+    return phases;
+  }
 
   function startAnimation() {
     const plan = state.plan;
     if (!plan) return;
-    const timeline = [];
-    let prev = { a: 0, c: 0 }, step = 0;
-    for (const sl of plan.sliced) {
-      const first = step, last = step + sl.layers.length - 1;
-      const descend = plan.gcode?.path.find((p) => p.type === 'descend' && p.segmentId === sl.segmentId)?.machine;
-      timeline.push({ kind: 'rotate', from: prev, to: sl.pose, dur: 1.4, first, descend });
-      timeline.push({ kind: 'print', pose: sl.pose, dur: Math.min(5, Math.max(2, sl.layers.length * 0.025)), first, last });
-      prev = sl.pose;
-      step = last + 1;
-    }
-    anim = { timeline, start: performance.now(), total: timeline.reduce((s, p) => s + p.dur, 0) };
+    const timeline = buildTimeline(plan);
+    anim = { timeline, t: 0, last: performance.now(), total: timeline.reduce((s, p) => s + p.dur, 0) };
     $('animPlay').textContent = '■ Stop animation';
+    $('animCaption').hidden = false;
     plan.showToolpaths = true;
     viewer.setGhost(true);
+    viewer.setTableGhost(true);
     animFrame();
   }
 
@@ -254,39 +323,48 @@ export function initPipeline(app) {
     cancelAnimationFrame(anim.frame);
     anim = null;
     $('animPlay').textContent = '▶ Play machine animation';
+    $('animCaption').hidden = true;
+    viewer.setTableGhost(false);
     app.renderAll();
   }
 
   function animFrame() {
-    const t = (performance.now() - anim.start) / 1000;
-    if (t >= anim.total) {
+    // Advance time by the real time since the last frame x the chosen speed.
+    const now = performance.now();
+    anim.t += ((now - anim.last) / 1000) * Number($('animSpeed').value);
+    anim.last = now;
+    if (anim.t >= anim.total) {
       state.plan.step = state.plan.steps.length - 1;
       return stopAnimation();
     }
-    let acc = 0, phase = anim.timeline[0];
-    for (const p of anim.timeline) {
-      if (t < acc + p.dur) { phase = p; break; }
-      acc += p.dur;
-    }
-    const f = (t - acc) / phase.dur;
+    let acc = 0, index = 0;
+    while (index < anim.timeline.length - 1 && anim.t >= acc + anim.timeline[index].dur) acc += anim.timeline[index++].dur;
+    const phase = anim.timeline[index];
+    const f = Math.min(1, (anim.t - acc) / phase.dur);
     const pivot = state.machine.kinematics.pivot;
-    const model = new HotendModel(state.machine.hotend);
-    let pose, tip, step;
+
+    let pose, tip, step, caption = phase.caption;
     if (phase.kind === 'rotate') {
-      const e = f < 0.5 ? 2 * f * f : 1 - 2 * (1 - f) ** 2; // ease in/out
+      const e = easeInOut(f);
       pose = { a: phase.from.a + (phase.to.a - phase.from.a) * e, c: phase.from.c + (phase.to.c - phase.from.c) * e };
-      step = phase.first - 1;
-      // Nozzle waits above where the next segment starts (machine frame).
-      const m = phase.descend ?? [0, 0, state.machine.motion.safe_z];
-      tip = machineToPart(m, pose, pivot);
+      tip = machineToPart(phase.at, pose, pivot); // nozzle waits at safe Z
+      step = phase.step;
+    } else if (phase.kind === 'move') {
+      pose = phase.pose;
+      tip = machineToPart(lerp3(phase.from, phase.to, easeInOut(f)), pose, pivot);
+      step = phase.step;
     } else {
       pose = phase.pose;
       step = Math.min(phase.last, phase.first + Math.floor(f * (phase.last - phase.first + 1)));
-      tip = state.plan.steps[step].last;
+      tip = stepPoint(step, 'last', phase.first, phase.last);
+      caption = phase.caption(step - phase.first + 1);
     }
     viewer.setMachineTransform(tableRotation(pose.a, pose.c), pivot);
     viewer.setToolpathStep(step);
-    viewer.setHotend({ mesh: model.toMesh(tip, toolDirectionInPart(pose)), hit: false });
+    viewer.setHotend({ mesh: new HotendModel(state.machine.hotend).toMesh(tip, toolDirectionInPart(pose)), hit: false });
+    $('animCaptionText').textContent = caption;
+    $('animCaption').classList.toggle('paused', Boolean(phase.pause));
+    $('animProgress').style.width = `${(100 * anim.t) / anim.total}%`;
     state.plan.step = Math.max(0, step);
     renderStepLabel();
     anim.frame = requestAnimationFrame(animFrame);

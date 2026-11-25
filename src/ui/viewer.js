@@ -214,6 +214,17 @@ export class Viewer {
     });
   }
 
+  /** See-through table (used by the animation, so a tilted table never hides the part). */
+  setTableGhost(ghost) {
+    this.objects.table?.traverse((o) => {
+      if (!o.isMesh || o.geometry.type === 'SphereGeometry') return;
+      o.material.transparent = ghost;
+      o.material.opacity = ghost ? 0.3 : 1;
+      o.material.depthWrite = !ghost;
+      o.material.needsUpdate = true;
+    });
+  }
+
   /**
    * Toolpaths as coloured lines.
    * @param {{positions: Float32Array, colors: Float32Array, stepEnds: number[]}|null} paths

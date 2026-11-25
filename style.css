@@ -196,3 +196,16 @@ pre.log {
 .issue .btn { flex-shrink: 0; }
 
 body.busy, body.busy * { cursor: progress !important; }
+
+/* ---------------------------- animation caption ------------------------- */
+.anim-caption {
+  position: absolute; left: 50%; bottom: 36px; transform: translateX(-50%);
+  width: min(620px, calc(100% - 32px));
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px 12px; font-size: 14px; font-weight: 550;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.anim-caption.paused { border-left-color: var(--warn); }
+.anim-bar { height: 4px; background: var(--panel-2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.anim-bar > div { height: 100%; width: 0; background: var(--accent); }

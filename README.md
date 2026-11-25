@@ -52,8 +52,12 @@ printed with flat layers in its own direction:
    say **✓ Cuts form a valid print order** before you can slice.
 7. **Slice + check collisions.** Read the summary. Any collision is listed
    with a **Show** button that jumps the layer slider there. Drag the
-   **Layer** slider through the print, then press **▶ Play machine animation**
-   to watch the table turn between segments.
+   **Layer** slider through the print, then press **▶ Play machine animation**.
+   It plays every segment in order. Between segments the nozzle lifts, the
+   machine **pauses**, the table tilts to the next A/C angles, and it
+   **pauses again** with the table locked. Then the nozzle comes down and the
+   layers print. A caption narrates each step, and the speed menu goes from
+   0.5× to 4×.
 8. **Save project** (keeps your cuts and settings) and **Download G-code**.
 9. **First real test:** print `examples/cube_with_arm.json` in the air
    (no filament, Z raised) and watch that the table turns the way the
