@@ -1,22 +1,23 @@
 {
-  "version": 1,
+  "app": "RDH5AxisSlicer",
+  "version": 2,
   "model": {
-    "demo": "T-shape",
-    "place_on_bed": true
+    "demo": "T-shape"
   },
-  "overhang_angle_deg": 50.0,
+  "place_on_bed": true,
+  "overhang_angle_deg": 50,
   "cuts": [
     {
       "name": "right bar",
       "point": [
-        5.0,
-        0.0,
-        34.0
+        5,
+        0,
+        34
       ],
       "normal": [
-        1.0,
-        0.0,
-        0.0
+        1,
+        0,
+        0
       ],
       "local": false,
       "components": null
@@ -24,14 +25,14 @@
     {
       "name": "left bar",
       "point": [
-        -5.0,
-        0.0,
-        34.0
+        -5,
+        0,
+        34
       ],
       "normal": [
-        -1.0,
-        0.0,
-        0.0
+        -1,
+        0,
+        0
       ],
       "local": false,
       "components": null

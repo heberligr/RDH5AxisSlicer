@@ -1,13 +1,4 @@
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-# Polyscope writes this next to wherever you launch it
-imgui.ini
-# Temporary slicer output (later milestones)
-tmp/
-output/
-.polyscope.ini
-
-# Log written when started by double-click
-segslicer.log
+node_modules/
+.DS_Store
+# screenshots written by the end-to-end test
+tests/e2e/out/

@@ -1,202 +1,155 @@
-# segslicer: "3+2" segmented slicer for a DIY 5-axis FDM printer
+# RDH5AxisSlicer
 
-**Status: Milestone 2 (manual segment editor).** The full README (pivot
-calibration, tuning, first-print workflow) comes in Milestone 7.
+**A "3+2" segmented slicer for a DIY 5-axis FDM printer, running in your browser.**
 
-| Overhangs flagged (red) | Cut into segments | Machine view of segment 1 |
+### ▶ [Open the slicer](https://heberligr.github.io/RDH5AxisSlicer/)
+
+Nothing to install: the link opens the app. It starts with an example already
+cut into segments.
+
+| Overhangs flagged in red | Cut into segments | Machine view of segment 1 |
 |---|---|---|
-| ![](docs/m2_overhangs.png) | ![](docs/m2_segments.png) | ![](docs/m2_machine_view.png) |
+| ![](docs/overhangs.png) | ![](docs/segments.png) | ![](docs/machine_view.png) |
 
-## Start the app (no typing needed)
+**Status:** milestones 1–2 (math core and manual segment editor). Automatic
+segmentation, slicing and G-code output are next.
 
-1. Install **Python 3.11 or newer** from https://www.python.org/downloads/.
-   On Windows, tick **"Add python.exe to PATH"** in the installer.
-2. Open the repo folder and double-click the launcher for your computer:
+## The idea
 
-   | Computer | Double-click |
-   |---|---|
-   | Windows | `RDH5AxisSlicer.bat` |
-   | macOS | `RDH5AxisSlicer.command` |
-   | Linux | `RDH5AxisSlicer.sh` (choose "Run" if asked) |
+A normal printer builds everything straight up, so anything sticking out
+sideways (an overhang) needs support material. This printer has a tilting
+(A) and rotating (C) table, so the part can be **cut into chunks (segments)**,
+each printed with flat layers in its own direction:
 
-The **first launch** sets everything up, which takes a few minutes and shows a
-window with progress. It creates a private Python environment in `.venv` inside
-the folder and installs the libraries. After that, the launcher opens the
-slicer straight away. It also re-installs by itself whenever
-`requirements.txt` changes.
+1. Load a part. Faces that would need support are shown **red**.
+2. Add **cuts**. Each cut is a plane, and its normal is the build direction of
+   the new segment on that side.
+3. The app splits the part into watertight segments and works out which one
+   rests on which, and therefore the **print order**. It also computes the
+   **A/C table angles** for each segment and checks that the **hotend won't
+   hit** anything.
+4. While printing a segment the rotary axes never move. They only turn
+   between segments.
 
-Inside the app:
+## Using it
 
-- **Open STL...** picks a model with the normal file browser.
-- **Demo part** loads a built-in cube, cube with arm, or T-shape.
-- **Project > Open project... / Save project as...** loads and saves your cuts.
-  Try opening `examples/t_shape.json`.
-- On Windows you can also drag an `.stl` or project `.json` onto
-  `RDH5AxisSlicer.bat`.
+| What | How |
+|---|---|
+| Open your own part | **Open STL…**, or drag an `.stl` onto the 3D view |
+| Try a built-in part | **Demo part** → Cube / Cube with arm / T-shape → **Load demo** |
+| Add a cut | **Add cut**, then set the point and normal (sliders or numbers) |
+| Snap a cut to a face | Click a face in the 3D view, then **Normal ← face** / **Point ← picked** |
+| Local cut | Tick **Local cut** to move only the piece(s) you choose |
+| Reorder / delete | ▲ ▼ **Delete** on the selected cut (order matters, see below) |
+| Save your work | **Project → Save project** downloads one `.json` file (your STL is stored inside it) |
+| Reopen | **Project → Open project…**, or drag the `.json` onto the view |
+| Check a segment's angles | **Hotend / IK test → Aim at selected cut**, then tick **Machine view** |
+| Use your machine's numbers | **Machine → Load machine.yaml…** (or edit `config/machine.yaml` in the repo) |
 
-**If it doesn't start:**
+### How cuts behave
 
-- **Windows:** the app runs without a console, so errors go to
-  `segslicer.log` in the folder.
-- **macOS:** the first time, you may need to right-click the `.command` file
-  and choose **Open** to get past the security warning.
-- If the file browser doesn't appear (some Linux Pythons lack Tkinter), type
-  the path in the box under the button instead. On Linux, `sudo apt install
-  python3-tk` adds Tkinter.
+- A cut only splits the segment that **contains its point**. A plane that
+  passes through other segments leaves them alone.
+- **Normal cut:** everything on the normal's side becomes the new segment.
+- **Local cut:** that side can be several separate pieces (e.g. two posts).
+  Only the ticked piece(s) move, and the rest stay with the segment that was
+  cut.
+- Cuts are applied in list order, so **▲ ▼ can change the result**.
+- **Print order** comes from the geometry: each segment's flat base face rests
+  on some other segment, and that one prints first.
+- The Segments panel warns about cuts that are skipped, pieces printing in
+  mid-air, segments that depend on each other in a loop, and directions
+  beyond the A-axis limits.
 
-### From a terminal (optional)
+**Overhang rule:** with build direction `d`, a face is an overhang when its
+normal is within `90° − threshold` of `−d`. The default threshold is 50°, so
+faces leaning more than 50° from vertical count. Faces sitting on a segment's
+own base never count.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python -m segslicer [model.stl | project.json] [--machine my_machine.yaml]
-```
+## Your machine: `config/machine.yaml`
 
-## Run the tests
-
-```bash
-python -m pytest
-```
-
-## Configure your machine
-
-Edit `config/machine.yaml`. Every value marked **FILL IN** is a placeholder.
-The most important ones are:
+Every value marked **FILL IN** is a placeholder until the hardware exists.
+Edit the file in the repo (GitHub's pencil icon works) and the site updates
+within a minute or two. To try other numbers without changing the repo, use
+**Machine → Load machine.yaml…**.
 
 | Key | What it is |
 |---|---|
 | `kinematics.pivot` | Machine XYZ where the A and C axes cross |
-| `kinematics.a_axis.sign` / `c_axis.sign` | `1` if a positive G-code angle turns the table by the right-hand rule, `-1` if the other way |
-| `kinematics.*.min_deg/max_deg` | Rotary travel limits, in commanded degrees |
-| `table.surface_z` | Machine Z of the table top at A = 0 |
-| `hotend.*` | Collision envelope (cone at the tip and a cylinder above it) |
+| `kinematics.*.sign` | `1` if a positive G-code angle turns the table by the right-hand rule, `-1` otherwise |
+| `kinematics.*.min_deg/max_deg` | Rotary travel limits, in G-code (commanded) degrees |
+| `table.*` | Rotary table size, and Z of its top surface at A = 0 |
+| `hotend.*` | Collision envelope: a cone at the tip plus a cylinder for the heater block / fan |
 
-`config/settings.yaml` holds the PrusaSlicer path (used from Milestone 4).
+## How the math works
 
-## Code map
-
-```
-segslicer/
-  config.py      machine.yaml / settings.yaml -> dataclasses, with validation
-  transforms.py  rotations: direction -> +Z and back, rotate about a point
-  kinematics.py  A/C inverse kinematics, part frame <-> machine XYZ
-  collision.py   hotend cone + cylinder model, sampled-surface collision check
-  mesh_io.py     STL loading, placing the part on the table
-  geometry.py    plane cuts (manifold3d), unions, point-in-mesh, distances
-  overhang.py    which faces are overhangs for a given build direction
-  segments.py    cuts -> segments, local cuts, dependency / print order
-  project.py     save / load projects as JSON
-  demo_models.py cube, cube-with-arm, T-shape generated in code
-  file_dialog.py native Open/Save dialogs (Tkinter, in a helper process)
-  viewer.py      Polyscope window and ImGui panel
-tests/           pytest unit tests
-examples/        saved projects for the demo parts
-```
-
-### The kinematics in one picture
-
-The part sits on the C table, and the C table sits on the A trunnion. So a
-point `p` on the part (part frame = machine frame when A = C = 0) ends up at
+**Kinematics.** The part sits on the C table, and the C table sits on the A
+trunnion, so a part point `p` ends up at
 
 ```
 machine = R_A(a) · R_C(c) · (p − pivot) + pivot
 ```
 
-with `R_A` a rotation about X and `R_C` a rotation about Z. For a segment with
-build direction `d`, the inverse kinematics (IK) finds `a` and `c` so that
-`R_A R_C d = +Z`. That makes the segment's layers horizontal under the nozzle:
+For a segment with build direction `d`, the inverse kinematics (IK) finds `a`
+and `c` with `R_A R_C d = +Z`, so that segment's layers are horizontal under
+the nozzle:
 
-1. Turn C so `d` lies in the machine's YZ plane: `c = 90° − atan2(dy, dx)`.
+1. Turn C so `d` lies in the YZ plane: `c = 90° − atan2(dy, dx)`.
 2. Tilt A by the angle between `d` and vertical: `a = atan2(√(dx²+dy²), dz)`.
 
-There is always a mirror solution (`a → −a`, `c → c − 180°`). The code tries
-both, keeps those inside the axis limits, and picks the one with the smallest
-C move from the previous pose.
+There's always a mirror solution (`a → −a`, `c → c − 180°`). The code keeps
+whichever is inside the limits with the smaller C move.
 
-### The collision check
+**Collision check.** Obstacles (the table, and segments already printed) are
+turned into points spread ~1 mm apart over their surfaces. For a nozzle
+position, those points are rotated into the tool's frame and tested against
+the cone + cylinder. The shape is grown slightly so nothing slips between the
+points, so the check errs on the safe side.
 
-Obstacle meshes (the table and segments already printed) are sampled into
-surface points about `collision.sample_spacing` mm apart. For a given nozzle
-tip and tool direction, the points are moved into the tool frame and tested
-against the cone/cylinder envelope. The envelope is grown slightly so a
-surface cannot slip between samples, which makes the check err on the safe
-side. Points within `hotend.tip_ignore_height` of the tip along the axis are
-ignored, so the surface being printed on does not count as a hit.
+**Cutting** uses [manifold-3d](https://github.com/elalish/manifold), compiled
+to WebAssembly. It keeps every segment a closed, watertight solid.
 
-## Segments and cuts
+## Code map
 
-A **cut** is a plane: a point and a normal. The normal is the **build
-direction** of the new segment, which forms on the side the normal points to.
-Segment 0 is what's left on the bed and prints straight up (+Z).
+```
+index.html, style.css     the page (GitHub Pages serves these directly; no build step)
+config/machine.yaml       your machine
+examples/                 saved example projects
+src/core/                 all the logic - plain JavaScript, no browser needed
+  vec.js, transforms.js   vectors, rotations (direction -> +Z and back)
+  config.js               machine.yaml -> validated object, clear errors
+  kinematics.js           A/C inverse kinematics, part <-> machine coordinates
+  collision.js            hotend cone + cylinder, sampled-surface collision check
+  mesh.js, meshIO.js      triangle mesh, STL read/write, placing on the table
+  geometry.js             plane cuts and unions (manifold-3d), point-in-mesh, distances
+  overhang.js             which faces are overhangs
+  segments.js             cuts -> segments, local cuts, print order, warnings
+  project.js              save/load projects as JSON
+  demoModels.js           cube, cube with arm, T-shape
+src/ui/
+  viewer.js               the 3D view (three.js)
+  app.js                  the side panel and app state
+tests/                    unit tests (Node) + tests/e2e browser test
+```
 
-Cuts are applied in list order:
+## For development (optional)
 
-1. The cut only splits the segment that **contains its point**. A plane that
-   also passes through other segments leaves them alone.
-2. **Normal cut:** everything on the normal's side becomes the new segment.
-3. **Local cut:** the normal's side can break into separate pieces (e.g. two
-   posts sticking up). Only the selected piece(s) become the new segment
-   (default: the piece nearest the cut point). The others stay with the
-   segment that was cut.
+The app itself needs nothing installed. To run the tests, install
+[Node.js](https://nodejs.org) 20 or newer, then:
 
-Since each cut only sees the cuts before it, **Up/Down reorders and can change
-the result**.
+```bash
+npm install
+```
 
-**Print order** is worked out from the geometry. Each segment's flat base face
-(its "cap") rests on some other segment, and that segment must print first.
-The app probes just below the cap to find out which one it is. The Segments
-panel warns about:
+```bash
+npm test
+```
 
-- a cut point that isn't inside anything
-- a plane that doesn't actually split its segment
-- a piece that would print in mid-air
-- a base that rests on nothing
-- segments that depend on each other in a loop
-- build directions beyond the A-axis limits
+`npm run serve` serves the app at http://localhost:8123 so you can try
+changes before pushing. `npm run test:e2e` drives the real page in a headless
+browser (needs Playwright with Chromium). `npm run docs:screenshots`
+regenerates the images above.
 
-**Overhangs:** with build direction `d`, a face is an overhang when its normal
-is within `90 - threshold` degrees of `-d` (default threshold 50, so faces
-leaning more than 50 deg from vertical). Faces on a segment's own base are
-ignored.
-
-### Editing a cut
-
-- **Point / Slide along normal** move the plane.
-- **Normal tilt / azimuth** (or the raw vector) set the build direction.
-- **Click a face** in the 3D view to pick it. Then use **Normal <- picked
-  face**, **Point <- picked point**, or both. Example: to print an arm
-  sideways, pick the arm's end face to get the normal, then slide the plane
-  back to where the arm meets the body.
-- **Live update** re-cuts on every change. Turn it off for big meshes and use
-  **Apply cuts** instead.
-- **Project > Save/Load** stores the model path (relative to the project file)
-  and the cuts as JSON.
-
-## Milestone 2 manual test checklist
-
-1. Start the app, choose **T-shape** and click **Load demo**. The bar
-   undersides are red.
-2. **Add cut**. Set the point to `5, 0, 34` and the normal tilt/azimuth to
-   90 / 0. The right half of the bar turns blue and loses its red.
-3. Add a second cut at `-5, 0, 34` with azimuth 180. You now have 3 segments,
-   print order 1-2-3, and no warnings.
-4. Open **Hotend / IK test**, select cut 1, click **Aim at selected cut**,
-   then tick **Machine view**. The blue segment stands upright under a
-   vertical hotend.
-5. Try a bad cut (normal pointing down, `tilt 180`) and read the warnings.
-6. Save the project, load another demo, then load the project again.
-7. Compare with **Open project...** > `examples/t_shape.json`.
-
-## Milestone 1 manual test checklist
-
-1. **Open STL...** and pick a part: it sits on the grey table,
-   centred on the orange pivot point.
-2. Open **Hotend / IK test** and tick **Show hotend**. The green hotend sits at
-   the top centre of the part.
-3. Drag **Tilt** to about 45° and change **Azimuth**. The A/C numbers update.
-   When the hotend hits the part or table, it turns red and the panel names
-   the obstacle.
-4. Tick **Machine view**. The part and table rotate by A/C, and the hotend
-   should always point straight down (vertical) at the tilted part.
-5. Set Tilt above 90°. The panel should say the direction is unreachable.
+Libraries (three.js, manifold-3d, js-yaml) load from the jsDelivr CDN at
+exact pinned versions, set in the `importmap` in `index.html`. The test setup
+in `package.json` pins the same versions.

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RDH5AxisSlicer</title>
+  <meta name="description" content="3+2 segmented slicer for a DIY 5-axis FDM printer, running in the browser.">
+  <link rel="stylesheet" href="style.css">
+  <!--
+    Libraries are loaded straight from a CDN, pinned to exact versions, so
+    there is no build step: GitHub Pages serves these files as they are.
+    The bare names ("three", "manifold-3d", "js-yaml") are what the code
+    imports; the same names resolve to node_modules when tests run in Node.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+      "manifold-3d": "https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js",
+      "js-yaml": "https://cdn.jsdelivr.net/npm/js-yaml@5.4.3/dist/js-yaml.mjs"
+    }
+  }
+  </script>
+  <script type="module" src="src/ui/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">RDH5AxisSlicer</span>
+      <span class="brand-sub">3+2 segmented slicer for a 5-axis FDM printer</span>
+    </div>
+    <a class="topbar-link" href="https://github.com/heberligr/RDH5AxisSlicer" target="_blank" rel="noopener">Source on GitHub</a>
+  </header>
+
+  <main class="layout">
+    <!-- ======================= 3D view ======================= -->
+    <section class="view" id="view">
+      <div class="view-hint" id="viewHint">Drag to orbit · right-drag to pan · scroll to zoom · click a face to pick it · drop an STL here</div>
+      <div class="toast" id="toast" hidden></div>
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText">Loading geometry engine…</div>
+      </div>
+    </section>
+
+    <!-- ======================= Side panel ======================= -->
+    <aside class="panel" id="panel">
+
+      <details open>
+        <summary>Model</summary>
+        <div class="row">
+          <label class="btn primary file-btn">Open STL…<input type="file" id="stlInput" accept=".stl" hidden></label>
+          <span class="muted">or drop a file on the view</span>
+        </div>
+        <div class="row">
+          <select id="demoSelect" aria-label="Demo part"></select>
+          <button class="btn" id="demoLoad">Load demo</button>
+        </div>
+        <label class="check"><input type="checkbox" id="placeOnBed" checked> Place on table when loading</label>
+        <ul class="info" id="modelInfo"><li class="muted">No model loaded.</li></ul>
+      </details>
+
+      <details>
+        <summary>Project</summary>
+        <div class="row">
+          <button class="btn" id="projectSave">Save project</button>
+          <label class="btn file-btn">Open project…<input type="file" id="projectInput" accept=".json" hidden></label>
+        </div>
+        <div class="row">
+          <select id="exampleSelect" aria-label="Example project"></select>
+          <button class="btn" id="exampleLoad">Open example</button>
+        </div>
+        <p class="muted small">Projects are a single .json file. Uploaded STLs are stored inside it.</p>
+      </details>
+
+      <details open>
+        <summary>Cuts</summary>
+        <div id="cutsNeedModel" class="muted">Load a model first.</div>
+        <div id="cutsBody" hidden>
+          <label class="check"><input type="checkbox" id="showOverhangs" checked> Show overhangs <span class="swatch overhang"></span></label>
+          <div class="slider-row">
+            <label for="overhangAngle">Overhang threshold</label>
+            <input type="range" id="overhangAngle" min="10" max="89" step="1" value="50">
+            <output id="overhangAngleOut">50°</output>
+          </div>
+
+          <div class="row">
+            <button class="btn primary" id="cutAdd">Add cut</button>
+            <label class="check"><input type="checkbox" id="liveUpdate" checked> Live update</label>
+            <button class="btn" id="cutApply" hidden>Apply cuts</button>
+          </div>
+          <ol class="cut-list" id="cutList"></ol>
+
+          <div id="cutEditor" class="editor" hidden>
+            <div class="row">
+              <strong id="cutEditorTitle">Cut</strong>
+              <span class="spacer"></span>
+              <button class="btn small" id="cutUp" title="Move up">▲</button>
+              <button class="btn small" id="cutDown" title="Move down">▼</button>
+              <button class="btn small danger" id="cutDelete">Delete</button>
+            </div>
+
+            <div class="field-label">Point (mm)</div>
+            <div class="vec3">
+              <input type="number" step="0.5" id="cutPx" aria-label="Point X">
+              <input type="number" step="0.5" id="cutPy" aria-label="Point Y">
+              <input type="number" step="0.5" id="cutPz" aria-label="Point Z">
+            </div>
+            <div class="slider-row">
+              <label for="cutSlide">Slide along normal</label>
+              <input type="number" step="0.5" id="cutSlide">
+            </div>
+
+            <div class="field-label">Normal = build direction of the new segment</div>
+            <div class="slider-row">
+              <label for="cutTilt">Tilt from +Z</label>
+              <input type="range" id="cutTilt" min="0" max="180" step="0.5">
+              <output id="cutTiltOut"></output>
+            </div>
+            <div class="slider-row">
+              <label for="cutAz">Azimuth</label>
+              <input type="range" id="cutAz" min="-180" max="180" step="0.5">
+              <output id="cutAzOut"></output>
+            </div>
+            <div class="vec3">
+              <input type="number" step="0.05" id="cutNx" aria-label="Normal X">
+              <input type="number" step="0.05" id="cutNy" aria-label="Normal Y">
+              <input type="number" step="0.05" id="cutNz" aria-label="Normal Z">
+            </div>
+            <div class="row"><button class="btn small" id="cutFlip">Flip normal</button></div>
+
+            <div id="pickBox" class="pick">
+              <div id="pickText" class="muted small">Tip: click a face in the view to pick it, then snap the plane to it.</div>
+              <div class="row" id="pickButtons" hidden>
+                <button class="btn small" id="snapNormal">Normal ← face</button>
+                <button class="btn small" id="snapPoint">Point ← picked</button>
+                <button class="btn small" id="snapBoth">Both</button>
+              </div>
+            </div>
+
+            <label class="check"><input type="checkbox" id="cutLocal"> Local cut (only selected piece(s) move)</label>
+            <div id="pieceBox" hidden>
+              <label class="check"><input type="checkbox" id="pieceAuto"> Auto: piece nearest the cut point</label>
+              <div id="pieceList"></div>
+            </div>
+            <div id="cutReport" class="small"></div>
+          </div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Segments</summary>
+        <div id="segmentsBody" class="muted">No model loaded.</div>
+      </details>
+
+      <details>
+        <summary>Hotend / IK test</summary>
+        <label class="check"><input type="checkbox" id="toolShow"> Show hotend</label>
+        <div class="row">
+          <button class="btn small" id="toolAim">Aim at selected cut</button>
+          <button class="btn small" id="toolAll" hidden>Check all segments</button>
+        </div>
+        <div id="toolScope" class="muted small"></div>
+        <div class="slider-row">
+          <label for="toolTilt">Tilt from +Z</label>
+          <input type="range" id="toolTilt" min="0" max="120" step="0.5" value="0">
+          <output id="toolTiltOut">0°</output>
+        </div>
+        <div class="slider-row">
+          <label for="toolAz">Azimuth</label>
+          <input type="range" id="toolAz" min="-180" max="180" step="0.5" value="0">
+          <output id="toolAzOut">0°</output>
+        </div>
+        <div class="field-label">Tip point (part frame, mm)</div>
+        <div class="vec3">
+          <input type="number" step="0.5" id="toolTx" aria-label="Tip X">
+          <input type="number" step="0.5" id="toolTy" aria-label="Tip Y">
+          <input type="number" step="0.5" id="toolTz" aria-label="Tip Z">
+        </div>
+        <label class="check"><input type="checkbox" id="machineView"> Machine view (apply A/C)</label>
+        <ul class="info" id="toolStatus"></ul>
+      </details>
+
+      <details>
+        <summary>Machine</summary>
+        <ul class="info" id="machineInfo"></ul>
+        <div class="row">
+          <label class="btn small file-btn">Load machine.yaml…<input type="file" id="machineInput" accept=".yaml,.yml" hidden></label>
+          <button class="btn small" id="machineReset">Use repo default</button>
+        </div>
+        <p class="muted small">The default comes from <code>config/machine.yaml</code> in the repo. Values marked FILL IN are placeholders until the hardware is built.</p>
+      </details>
+    </aside>
+  </main>
+</body>
+</html>
